@@ -347,9 +347,13 @@ static int plugin_run_or_verify(int argc, lcmaps_argument_t *argv,
     /* Do actual verification */
     if (psp_verify_proxy_signature(payload_cert, pilot_cert))
 	goto fail_plugin;
-    
+
+    X509_NAME *pilot_name = NULL;
+    if (psp_get_name(pilot_chain, &pilot_name))
+        goto fail_plugin;
+ 
     /* Store the DN of the payload cert as user_dn */
-    if (psp_store_proxy_dn(payload_cert))
+    if (psp_store_proxy_dn(pilot_name, payload_cert))
 	goto fail_plugin;
 
     /* Store the FQANs of the proxy when add_pilot_fqans==1 */

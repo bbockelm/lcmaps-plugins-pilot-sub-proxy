@@ -189,6 +189,52 @@ int psp_get_payload_proxy(STACK_OF(X509) **certstack,
 }
 
 /**
+ * Checkts to see if we have a CA certificate.
+ */
+int x509IsCA(X509 *cert)
+{
+    int purpose_id;
+    char name[10];
+
+    strncpy(name,"sslclient",10);
+
+    purpose_id = X509_PURPOSE_get_by_sname(name);
+
+    /* final argument to X509_check_purpose() is whether to check for CAness */
+
+    if (X509_check_purpose(cert, purpose_id + X509_PURPOSE_MIN, 1))
+        return 1;
+    else return 0;
+}
+
+/**
+ * Obtains the subject name (X509_NAME*) of the EEC.
+ */
+int psp_get_name(STACK_OF(X509) *certstack, X509_NAME **name)
+{
+    X509 *cert;
+    /* Implementation broadly from scas-client */
+    /* count certificates in chain and determine notBefore/notAfter */
+    int depth = sk_X509_num(certstack);
+    int amount_of_CAs = 0;
+    int i;
+    for (i = 0; i < depth; i++) {
+        cert = sk_X509_value(certstack, i);
+
+        /* Is it a CA ? */
+        if (x509IsCA(cert))    {
+            lcmaps_log(LOG_DEBUG,"%s: CA cert at depth %d\n", __func__, i);
+            amount_of_CAs++;
+        }
+    }
+
+    /* Determine EEC */
+    cert = sk_X509_value(certstack, depth - 1 - amount_of_CAs);
+    *name = X509_get_subject_name(cert);
+    return (*name == NULL) ? -1 : 0;
+}
+
+/**
  * Obtains the FQANs from the plugin arguments
  * \return 0 on success, -1 on error
  */
@@ -347,13 +393,29 @@ int psp_match_fqan(int nfqan, char **fqans, const char *pattern)    {
  * as the user_dn
  * \return 0 on success, -1 on error
  */
-int psp_store_proxy_dn(X509 *payload)    {
+int psp_store_proxy_dn(X509_NAME * pilot_name, X509 *payload)    {
     X509_NAME *subject=NULL;
     char *payload_dn=NULL;
     int rc;
 
-    if ( (subject=X509_get_subject_name(payload))==NULL ||
-	 (payload_dn=X509_NAME_oneline(subject, NULL, 0))==NULL )
+    if ( (subject=X509_get_subject_name(payload))==NULL )
+    {
+        lcmaps_log(LOG_WARNING, "%s: cannot obtain DN of payload certificate\n");
+        return -1;
+    }
+
+    int count = X509_NAME_entry_count(subject);
+    X509_NAME_ENTRY *payload_cn = X509_NAME_get_entry(subject, count-1);
+    if (payload_cn == NULL)
+    {
+        lcmaps_log(LOG_WARNING, "%s: Unable to get CN of payload certificate\n");
+        return -1;
+    }
+
+    count = X509_NAME_entry_count(pilot_name);
+    X509_NAME_add_entry(pilot_name, payload_cn, count, 0);
+
+    if ( (payload_dn=X509_NAME_oneline(pilot_name, NULL, 0))==NULL )
     {
 	lcmaps_log(LOG_WARNING, "%s: cannot obtain DN of payload certificate\n",
 		__func__);

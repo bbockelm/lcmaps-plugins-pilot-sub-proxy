@@ -58,6 +58,13 @@ int psp_get_payload_proxy(STACK_OF(X509) **certstack,
                       int argc, lcmaps_argument_t *argv);
 
 /**
+ * Gets the X509_NAME * of the EEC in a cert stack.
+ * Caller does _not_ own the returned memory in `name` on success
+ * \return 0 on success, -1 on error.
+ */
+int psp_get_name(STACK_OF(X509) *certstack, X509_NAME **name);
+
+/**
  * Obtains the FQANs from the plugin arguments
  * \return 0 on success, -1 on error
  */
@@ -92,7 +99,7 @@ int psp_match_fqan(int nfqan, char **fqans, const char *pattern);
  * as the user_dn
  * \return 0 on success, -1 on error
  */
-int psp_store_proxy_dn(X509 *payload);
+int psp_store_proxy_dn(X509_NAME * pilot_name, X509 *payload);
 
 /**
  * Stores the FQANs in the 'run-time' credential data, such that they can be
